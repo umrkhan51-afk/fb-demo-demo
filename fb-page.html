@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Page Dashboard</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .page-list-container::-webkit-scrollbar { width: 6px; }
+        .page-list-container::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .page-list-container::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+        .page-list-container::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-4 md:p-8 max-w-5xl">
+
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">Page Inbox Dashboard</h1>
+            <div class="flex items-center space-x-4 mt-4 md:mt-0">
+                <button id="refresh-button" class="bg-blue-600 text-white font-medium py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-150 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2.082a10.003 10.003 0 01-2.082 5.342A9.952 9.952 0 0112 22C6.477 22 2 17.523 2 12S6.477 2 12 2c2.81 0 5.36.99 7.3 2.63l-2.3 2.3M18 6h-5V1" />
+                    </svg>
+                    Refresh Data
+                </button>
+            </div>
+        </header>
+
+        <!-- Status Box -->
+        <div id="status-box" class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-6 shadow-sm hidden" role="alert">
+            <p class="font-bold" id="status-title">Loading...</p>
+            <p class="text-sm" id="status-message">Fetching live data from your server. Please wait.</p>
+        </div>
+
+        <!-- Dashboard Body -->
+        <main class="bg-white rounded-xl shadow-lg overflow-hidden">
+            <!-- Dashboard Toolbar -->
+            <div class="p-4 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row justify-between items-center">
+                <div class="relative w-full md:w-1/2">
+                    <input type="text" id="search-bar" placeholder="Search for a page..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+                <div class="flex items-center space-x-2 text-gray-600 mt-3 md:mt-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a8 8 0 11-16 0 8 8 0 0116 0z" />
+                    </svg>
+                    <span id="page-count" class="font-medium">0 Pages</span>
+                </div>
+            </div>
+
+            <!-- Page List Header -->
+            <div class="hidden md:grid grid-cols-3 gap-4 p-4 border-b border-gray-200">
+                <div class="font-bold text-gray-600 uppercase text-sm">Page Name</div>
+                <div class="font-bold text-gray-600 uppercase text-sm text-center">Pending Messages</div>
+                <div class="font-bold text-gray-600 uppercase text-sm text-center">Unreplied Comments</div>
+            </div>
+
+            <!-- Page List Container -->
+            <div id="page-list" class="page-list-container max-h-[60vh] overflow-y-auto">
+                <!-- Page items will be injected here by JavaScript -->
+                <div class="p-6 text-center text-gray-500" id="page-list-placeholder">
+                    Click "Refresh Data" to load your pages.
+                </div>
+            </div>
+        </main>
+
+        <!-- Loading Spinner (hidden by default) -->
+        <div id="loading-spinner" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- CONFIGURATION ---
+            // 1. Paste your Render.com backend URL here
+            const BACKEND_URL = 'https://fb-dashboard-backend-XXXX.onrender.com'; // !!! CHANGE THIS !!!
+            // ---------------------
+
+            const pageList = document.getElementById('page-list');
+            const searchBar = document.getElementById('search-bar');
+            const pageCountEl = document.getElementById('page-count');
+            const refreshButton = document.getElementById('refresh-button');
+            const loadingSpinner = document.getElementById('loading-spinner');
+            const statusBox = document.getElementById('status-box');
+            const statusTitle = document.getElementById('status-title');
+            const statusMessage = document.getElementById('status-message');
+            const pageListPlaceholder = document.getElementById('page-list-placeholder');
+
+            let allPagesData = []; // Store all fetched pages here
+
+            // 2. Render Function
+            function renderPages(pagesToRender) {
+                pageList.innerHTML = ''; // Clear existing list
+                
+                if (pagesToRender.length === 0) {
+                    pageList.innerHTML = `<div class="p-6 text-center text-gray-500">No pages found matching your search.</div>`;
+                    return;
+                }
+
+                pagesToRender.forEach(page => {
+                    const pageElement = document.createElement('div');
+                    pageElement.className = 'grid grid-cols-2 md:grid-cols-3 gap-4 items-center p-4 border-b border-gray-200 hover:bg-gray-50 transition duration-150';
+
+                    pageElement.innerHTML = `
+                        <!-- Page Name -->
+                        <div class="flex items-center space-x-3">
+                            <img src="${page.picture}" alt="Page Icon" class="w-10 h-10 rounded-full bg-gray-200">
+                            <span class="font-medium text-gray-800">${page.name}</span>
+                        </div>
+
+                        <!-- Pending Messages -->
+                        <div class="text-center">
+                            <span class="md:hidden text-sm font-bold text-gray-500 uppercase">Messages: </span>
+                            <span class="font-medium text-lg ${page.messages > 0 ? 'text-red-500' : 'text-gray-600'}">
+                                ${page.messages}
+                            </span>
+                        </div>
+
+                        <!-- Unreplied Comments -->
+                        <div class="text-center">
+                            <span class="md:hidden text-sm font-bold text-gray-500 uppercase">Comments: </span>
+                            <span class="font-medium text-lg ${page.comments > 0 ? 'text-blue-500' : 'text-gray-600'}">
+                                ${page.comments}
+                            </span>
+                        </div>
+                    `;
+                    pageList.appendChild(pageElement);
+                });
+            }
+
+            // 3. Search/Filter Function
+            function filterPages() {
+                const searchTerm = searchBar.value.toLowerCase();
+                const filteredPages = allPagesData.filter(page => 
+                    page.name.toLowerCase().includes(searchTerm)
+                );
+                renderPages(filteredPages);
+                pageCountEl.textContent = `${filteredPages.length} Pages`;
+            }
+
+            // 4. Show Status/Error Message
+            function showStatus(title, message, type = 'loading') {
+                statusBox.classList.remove('hidden', 'bg-yellow-100', 'border-yellow-500', 'text-yellow-700', 'bg-red-100', 'border-red-500', 'text-red-700');
+                if (type === 'error') {
+                    statusBox.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
+                } else {
+                    statusBox.classList.add('bg-yellow-100', 'border-yellow-500', 'text-yellow-700');
+                }
+                statusTitle.textContent = title;
+                statusMessage.textContent = message;
+            }
+
+            // 5. Event Listeners
+            searchBar.addEventListener('input', filterPages);
+
+            refreshButton.addEventListener('click', async () => {
+                if (BACKEND_URL.includes('XXXX')) {
+                    alert('Please open fb_dashboard.html in an editor and change the BACKEND_URL variable to your Render.com URL.');
+                    return;
+                }
+
+                loadingSpinner.classList.remove('hidden');
+                refreshButton.disabled = true;
+                refreshButton.classList.add('opacity-50', 'cursor-not-allowed');
+                pageListPlaceholder.style.display = 'none';
+                showStatus('Loading...', 'Fetching live data from your server. This may take a moment.');
+
+                try {
+                    const response = await fetch(`${BACKEND_URL}/get-page-data`);
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `Server error: ${response.status}`);
+                    }
+
+                    allPagesData = await response.json();
+                    renderPages(allPagesData);
+                    pageCountEl.textContent = `${allPagesData.length} Pages`;
+                    statusBox.classList.add('hidden'); // Hide status on success
+
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    showStatus('Error Loading Data', `Failed to fetch data. Check the console (F12) for details. (Error: ${error.message})`, 'error');
+                } finally {
+                    loadingSpinner.classList.add('hidden');
+                    refreshButton.disabled = false;
+                    refreshButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
